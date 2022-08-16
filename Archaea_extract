@@ -1,0 +1,44 @@
+conda init bash
+
+module load anaconda3
+
+module load samtools
+
+conda activate bio-env
+
+#Goes through the bam files and prints a count of the refseq alignments and accession ID to a "quality file"
+
+for content in *.bam;
+do
+      samtools view -q 30 $content | awk '{print $3}' | uniq -c | awk '{print $1", "$2}' |sort -n >> $content-quality.txt
+done
+
+#loop Goes through the sequence IDs in the second column of every Refseq quality file and loops through them into a command
+#that extracts the genbank file of the organism and gather the organism and taxonomy info
+#appends the organism name and taxa info of each organism in every line of a txt file
+#Then the Refseq quality files of the two columns are joined together by the Refseq taxa info files into one file
+
+for file in *quality.txt;
+do
+        seqs=$(awk '{print $2}' $file)
+
+        for ID in $seqs;
+        do
+                organism=$(efetch -db nuccore -id $ID -format gb | grep 'ORGANISM')
+                sleep 5
+                taxa=$(efetch -db nuccore -id $ID -format gb | grep -A 2 'Archaea' | tr -d '\n' | sed 's/;/; /g')
+                sleep 5
+                echo $organism $file $taxa >> $file.taxon.txt
+                sleep 5
+        done
+
+        paste $file $file.taxon.txt >> $file-profile.txt
+done
+
+#after loop is done, a python script is called that edits the files into csv format
+#The final command adds a header to the csv file of all content in the csv file 
+
+python3 Refseq_edit_file.py >> file_name.csv
+
+sed -i '1i Hits,Sequence_ID,Microbe_organism,Animal_species,Domain,Kingdom,Subkingdom,Phylum,Subpyhlum,Class,Subclass,Order,Family,Genus,Species' file_name.csv
+
